@@ -1,0 +1,165 @@
+---
+title: "Milestone 5"
+author: "Diego Arias"
+date: "4/3/2020"
+output: bookdown::pdf_document2
+bibliography: "bib.bib"
+biblio-style: "apalike"
+link_citations: true
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::write_bib(c("knitr", "stringr"), "bib.bib", width = 60)
+library(tidyverse)
+library(stargazer)
+library(gt)
+library(bibtex)
+library(lme4)
+```
+
+# Overview of Replication Paper[^1]
+
+In their paper, "Emotional Arousal Predicts Voting on the U.S. Supreme Court", Dietrich and colleagues study over 3,000 hours of Supreme Court audio recordings to try to assess if judges implicitly reveal their leanings during the oral arguments. The predictor in their analysis is “Pitch Difference”, which was calculated by subtracting the judges’ vocal pitches in questions directed to the respondents by their pitches in questions directed to the respondents. It is important to note that the judges’ vocal pitch at different instances was quantified in the number of standard deviations above or below his/her average vocal pitch in the trial. The outcome variable is the judge’s final vote (more specifically if he votes in favor of the petitioner (1) or against (0).
+
+In their effort to find study the effect of vocal pitch on voting, the authors use a multilevel logistic regression model that uses pitch difference as a predictor for voting behavior. Ultimately, the authors find that the more emotionally aroused a justice’s questions are at an attorney compared to his/her opponent, the less likely that attorney is to win the Justice’s vote. Interestingly, the model goes on to show that if the vocal pitch of the questions directed to both the petitioner and respondents is the same, the probability of a justice voting for a petitioner is .55. The model goes on to show the effect of vocal pitch because if the difference between the pitches of questions directed to the petitioner is one standard deviation higher than that related to the respondent (meaning the judge is more emotionally aroused) the probability of a justice voting for a petitioner drops to .48.
+	
+This multilevel logistic regression model ends up predicting 57.5% of the judge’s votes accurately and 66.55% of overall case outcomes accurately, which is incredible judging how the model just uses one implicit measure to predict something as complicated as voting behavior. To put this in perspective, the authors of the study compared their model to a widely known one called {Marshall}+, which uses 95 predictors and successfully predicts 64.76% of Supreme Court Cases. 
+
+This project will aim to replicate the aforementioned logistic regression model (and others included to answer secondary questions in the study). It will also take the analysis a step further by providing a new avenue to analyze the already collected data.
+
+# Beautiful? Graphic
+
+```{r}
+sc<-read.table("justice_results.tab",header=TRUE,as.is=TRUE,sep="\t")
+
+sc %>%
+  select(pitch_diff, petitioner_vote) %>%
+  filter(!pitch_diff < -20) %>%
+  mutate(Vote = ifelse(petitioner_vote == 1, "Petitioner", "Respondent")) %>%
+    ggplot(aes(x=Vote, y = pitch_diff)) + geom_violin() + 
+  geom_boxplot(width=0.1) +
+  stat_summary(fun.y=mean, geom="point", size=3, color = "red") +
+  labs(x= "Who Was the Judge's Vote in Favor of", y = "Difference in Pitch (Petitioner - Respondent)", title = "Looking at Relationship Between Pitch Difference and a Judge's Vote", caption = "\nWhile hard to see in the boxplot, judges who vote in favor of the petitioner will average have have\na more negative difference in pitch(which is measured as the pitch toward the petitioner\nminus the pitch toward the respondant) compared to judges who vote infavor of\nthe respondant\n\nData from Dietrich et al. (2011)")
+
+
+#sc %>%
+#  group_by(petitioner_vote) %>%
+ # summarize(mean = mean(pitch_diff))
+
+#glimpse(sc)
+
+sc %>%
+ group_by(justice) %>%
+  count()
+
+#demographic cha
+  
+```
+
+# Table
+ 
+```{r}
+sc<-read.table("justice_results.tab",header=TRUE,as.is=TRUE,sep="\t")
+
+mod1<-glmer(petitioner_vote~pitch_diff+(1|justiceName),data=sc,family=binomial)
+pred_mod1<-sum(diag(table(ifelse(predict(mod1,type="response")>.50,1,0),sc[names(residuals(mod1)),"petitioner_vote"])))/length(residuals(mod1))
+
+summary(mod1)
+
+
+#time trends: if present day cases have more emotions than old ones; is there a bigger effect now
+#coding dummies for specific time periods(maybe something distinctive about recent period)
+```
+
+# Appendix 
+
+```{r}
+### DIEGO: this code is reading in the justice table tab that is a seperate file in the zip
+#load justice_results
+sc<-read.table("justice_results.tab",header=TRUE,as.is=TRUE,sep="\t")
+
+
+### DIEGO: this is fitting a generalized linear mixed-effects model using the justices' name to predict the petitioner vote
+### DIEGO: the pre_mod is takoing this model and using it to make predictions. I am not quite sure what it really does though 
+#intercept only (Table 1, Model 1)
+
+mod0<-glmer(petitioner_vote~1+(1|justiceName),data=sc,family=binomial)
+pred_mod0<-sum(diag(table(ifelse(predict(mod0,type="response")>.50,1,0),sc[names(residuals(mod0)),"petitioner_vote"])))/length(residuals(mod0))
+
+#pitch only (Table 1, Model 2)
+### DIEGO: this will be fitting a different generalized linear mixed-effects model - with this one using the pitch difference of the judges' voice ot predict the petitioner vote
+### DIEGO: pitch difference is measured by subtracting the vocal pitch in questions directed toward petitioners from the vocal pitch in questions directed toward respondents
+mod1<-glmer(petitioner_vote~pitch_diff+(1|justiceName),data=sc,family=binomial)
+pred_mod1<-sum(diag(table(ifelse(predict(mod1,type="response")>.50,1,0),sc[names(residuals(mod1)),"petitioner_vote"])))/length(residuals(mod1))
+
+#dal model (Table 1, Model 3)
+
+### DIEGO: This code is creating new columns using data from other ones (these new columns code for negative and postive word frequency from the petitioner and respondent)
+sc$petitioner_pos_words<-sc$petitioner_dal_pos
+sc$petitioner_neg_words<-sc$petitioner_dal_neg
+sc$respondent_pos_words<-sc$respondent_dal_pos
+sc$respondent_neg_words<-sc$respondent_dal_neg
+
+
+### DIEGO: This is another glme model. In this case, it seems like there are multiple predictors being used to model petitioner vote. thus, in addition to the pitch difference, this model also includes the ideology of the justice and if he/she is conservative, it uses other measures as controls that were used in the artlce "Emotions, oral arguments, and supreme court decision making" by Black and colleagues in 2011. Importantly, this model uses the Dictionary of Affect in Language (DAL) measure to code pleasant and unpleasent words.
+
+mod2<-glmer(petitioner_vote~pitch_diff+I((petitioner_neg_words/petitioner_wc)-(respondent_neg_words/respondent_wc))+I((petitioner_pos_words/petitioner_wc)-(respondent_pos_words/respondent_wc))+I(petitioner_count-respondent_count)+lagged_ideology+conservative_lc+I(lagged_ideology*conservative_lc)+sgpetac+sgrespac+petac+respac+petNumStat+respNumStat+(1|justiceName),data=sc,family=binomial,nAGQ=2)
+pred_mod2<-sum(diag(table(ifelse(predict(mod2,type="response")>.50,1,0),sc[names(residuals(mod2)),"petitioner_vote"])))/length(residuals(mod2))
+
+#the model does not converge unless the number of points per axis for evaluating the adaptive Gauss-Hermite approximation to the log-likelihood is increased from 0. Coefficients and prediction rate are essentiall the same regardless of nAGQ used. More specifically, max coefficient change is around 10^-04
+
+#harvard model (Table 1, Model 4)
+sc$petitioner_pos_words<-sc$petitioner_harvard_pos
+sc$petitioner_neg_words<-sc$petitioner_harvard_neg
+sc$respondent_pos_words<-sc$respondent_harvard_pos
+sc$respondent_neg_words<-sc$respondent_harvard_neg
+
+## DIEGO: this generalized linear mixed effects model model is very similar to model 2 and includes the same controls, but instead of using the DAL ,measure, it uses the Harvard IV measure to code for pleasant and unpleasant words
+
+mod3<-glmer(petitioner_vote~pitch_diff+I((petitioner_neg_words/petitioner_wc)-(respondent_neg_words/respondent_wc))+I((petitioner_pos_words/petitioner_wc)-(respondent_pos_words/respondent_wc))+I(petitioner_count-respondent_count)+lagged_ideology+conservative_lc+I(lagged_ideology*conservative_lc)+sgpetac+sgrespac+petac+respac+petNumStat+respNumStat+(1|justiceName),data=sc,family=binomial)
+pred_mod3<-sum(diag(table(ifelse(predict(mod3,type="response")>.50,1,0),sc[names(residuals(mod3)),"petitioner_vote"])))/length(residuals(mod3))
+
+#liwc model (Table 1, Model 5)
+sc$petitioner_pos_words<-sc$petitioner_liwc_pos
+sc$petitioner_neg_words<-sc$petitioner_liwc_neg
+sc$respondent_pos_words<-sc$respondent_liwc_pos
+sc$respondent_neg_words<-sc$respondent_liwc_neg
+
+## DIEGO: this generalized linear mixed effects model model is very similar to model 2 and includes the same controls, but instead of using the DAL or Harvard IV measures, it uses the  Linguistic Inquiry and Word Count (LIWC) dictionary to code for pleasant and unpleasant words
+
+mod4<-glmer(petitioner_vote~pitch_diff+I((petitioner_neg_words/petitioner_wc)-(respondent_neg_words/respondent_wc))+I((petitioner_pos_words/petitioner_wc)-(respondent_pos_words/respondent_wc))+I(petitioner_count-respondent_count)+lagged_ideology+conservative_lc+I(lagged_ideology*conservative_lc)+sgpetac+sgrespac+petac+respac+petNumStat+respNumStat+(1|justiceName),data=sc,family=binomial,nAGQ=2)
+pred_mod4<-sum(diag(table(ifelse(predict(mod4,type="response")>.50,1,0),sc[names(residuals(mod4)),"petitioner_vote"])))/length(residuals(mod4))
+#the model does not converge unless the number of points per axis for evaluating the adaptive Gauss-Hermite approximation to the log-likelihood is increased from 0. Coefficients and prediction rate are essentiall the same regardless of nAGQ used. More specifically, max coefficent change is around 10^-04
+
+#stargazer(mod0,mod1,mod2,mod3,mod4,type='html',out='table_1.html',intercept.bottom = FALSE, intercept.top = TRUE, omit.stat = c('bic'), dep.var.labels.include = FALSE, dep.var.caption = "", column.labels = c('intercept only','no controls','dal','harvard','liwc'))
+```
+
+# What worked, what did not work
+
+I was able to replicate all of the main analysis, which was found in the finalizing results file that the authors provided. This did not take a while, as there was little main analysis done in the paper and there was only one table provided (and the code was able to smoothly run on my computer) Thus, my goal is to also look at some of the supplemental figures and tables (which are now in Pyhton) and replicate them because it feels like the main analysis is not enough. I will do this after meeting with Alice!
+
+# Proposed Extension
+
+I have a few ways where I think I could further take this paper and would love to talk about the pros and cons of them.
+
+For one, I think there must be a lot of individual differences with how much the justice’s pitch difference can be used to predict voting behavior. Namely, some judges’s pitch may be more revealing for whatever reason, while others may be able to better control their pitch and thus make it harder to predict their voting outcome from it. A way to test this out would be to use a stan_glm model that models voting behavior by using the pitch difference and justice variables (with an interaction). The interaction coefficient would be able to tell us how much the effect that pitch difference depends has on voting varies depending on the justice. I could then make a graph that is similar to the one on the supplemental figure 4, which looks at this effect for each judge. Still, the fact that this was done in the supplemental figure makes me feel like this possible extension isn’t original enough.
+
+Thus, an idea that came to mind is to add a column in the data which codes the gender of the judge, and then see if there are any differences in how vocal pitch predicts voting across male and female justices, and then create a plot that demonstrates the difference (or similarity). This stems from learning that women on average have a broader vocal pitch, which might mean that there is actually a bigger opportunity for the vocal pitch of the female justices to vary, and thus might better predict voting behavior. 
+Another possible idea is to see how this effect changes depending on the age of the justice. Maybe the older justice’s are, the more experience they have and the better than can control their voice to seem neutral even when they have already made up their mind. This could easily be done by including the date of birth as a separate column and subtracting this number from the year of the case to get how old the justice was during the case.
+
+Truthfully, I need to better understand Black et al’s 2011 paper and also the current papers coding of pleasant and unpleasant words to better understand model’s 2-4. After doing this, I might be able to propose some way to create a better model for voting behavior. This might just be combining one of these models with additional predictors which I find to be important, whether they are the specific justice, the gender of the justice, or the age of the justice (as previously explained). This is because models 2-4 have many more variables than the original model, but at most have a predictive power of only 7 percentage points higher. Maybe I can find a way to better code for the meaning and pleasantness of the words to make a more predictive model, or maybe its the case that the vocal pitch already reflects a lot of the positiveness the words (which I would be able to test with a simple correlational model between the two predictors)
+
+
+# References
+
+Dietrich, Bryce J., Ryan D. Enos, and Maya Sen. "Emotional arousal predicts voting on the US supreme court." Political Analysis 27.2 (2019): 237-243
+
+Miller, Gerald R., et al. "The effects of videotape testimony in jury trials: Studies on juror decision making, information retention, and emotional arousal." BYU L. Rev. (1975): 331.
+
+Oliver, Edward, and William Griffitt. "Emotional arousal and ‘objective’judgment." Bulletin of the Psychonomic Society 8.5 (1976): 399-400
+
+
+
+[^1]: Please refer to the Github repository of my final project for further information.^[[Github repository](https://github.com/Diego-arias/1006-milestone5)] I make use of @R-knitr and @R-stringr
